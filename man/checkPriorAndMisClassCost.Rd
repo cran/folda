@@ -35,3 +35,15 @@ the observed frequencies of the response, and the misclassification cost
 matrix is set to 1 for all misclassifications and 0 for correct
 classifications.
 }
+\examples{
+# Example 1: Using default prior and misClassCost
+response <- factor(c('A', 'B', 'A', 'B', 'C', 'A'))
+checkPriorAndMisClassCost(NULL, NULL, response)
+
+# Example 2: Providing custom prior and misClassCost
+prior <- c(A = 1, B = 1, C = 2)
+misClassCost <- matrix(c(0, 2, 10,
+                         1, 0, 10,
+                         1, 2, 0), nrow = 3, byrow = TRUE)
+checkPriorAndMisClassCost(prior, misClassCost, response)
+}

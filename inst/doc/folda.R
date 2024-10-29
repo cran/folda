@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -17,8 +17,15 @@ fit <- folda(datX = datX, response = response, subsetMethod = "all")
 fit <- folda(datX = datX, response = response, subsetMethod = "forward", testStat = "Pillai")
 print(fit) # 6 out of 11 variables are selected, displ is the most important among them
 
-## ---- fig.asp=0.618,out.width = "70%",fig.align = "center"--------------------
+## ----fig.asp=0.618,out.width = "70%",fig.align = "center"---------------------
 plot(fit, datX = datX, response = response)
+
+## ----fig.asp=0.618,out.width = "70%",fig.align = "center"---------------------
+# A 1D plot is created when there is only one feature 
+# or for binary classification problems.
+mpgSmall <- mpg[, c("cyl", "displ")]
+fitSmall <- folda(mpgSmall[, -1, drop = FALSE], mpgSmall[, 1])
+plot(fitSmall, mpgSmall, mpgSmall[, 1])
 
 ## -----------------------------------------------------------------------------
 head(predict(fit, datX, type = "response"))
@@ -70,6 +77,22 @@ fitAir$misReference
 
 ## -----------------------------------------------------------------------------
 predict(fitAir, data.frame(rep(NA, 4)))
+
+## -----------------------------------------------------------------------------
+table(mpg$cyl)
+
+## -----------------------------------------------------------------------------
+set.seed(443)
+fitCyl <- folda(mpg[, -5], mpg[, 5], downSampling = TRUE)
+fitCyl$confusionMatrix
+
+## -----------------------------------------------------------------------------
+fitCyl30 <- folda(mpg[, -5], mpg[, 5], downSampling = TRUE, kSample = 30)
+fitCyl30$confusionMatrix
+
+## -----------------------------------------------------------------------------
+fitCylWithPrior <- folda(mpg[, -5], mpg[, 5], downSampling = TRUE, prior = table(mpg[, 5]))
+fitCylWithPrior$confusionMatrix
 
 ## -----------------------------------------------------------------------------
 table(iris$Species, dnn = NULL)

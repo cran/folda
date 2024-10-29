@@ -71,6 +71,16 @@ Plot the results:
 plot(fit, datX = datX, response = response)
 ```
 
+One-dimensional plot:
+
+```{r, fig.asp=0.618,out.width = "70%",fig.align = "center"}
+# A 1D plot is created when there is only one feature 
+# or for binary classification problems.
+mpgSmall <- mpg[, c("cyl", "displ")]
+fitSmall <- folda(mpgSmall[, -1, drop = FALSE], mpgSmall[, 1])
+plot(fitSmall, mpgSmall, mpgSmall[, 1])
+```
+
 Make predictions:
 
 ```{r}
@@ -178,6 +188,47 @@ predict(fitAir, data.frame(rep(NA, 4)))
 Notice that no issues arise during predicting, even when the new data contains nothing but missing values.
 
 
+# Downsampling
+
+There are two common scenarios where downsampling can be helpful:
+
+1. The classes are highly imbalanced, and downsampling can make them more balanced.
+
+1. **To speed up computation**. The ULDA classifier is computed based on class centroids and the covariance structure. Once a sufficient number of data points, such as 3000, are included, additional data points **may** have minimal impact.
+
+By default, `downsampling` is disabled. If `downsampling = TRUE` and `kSample = NULL`, it will downsample all classes to the size of the smallest class. If `kSample` is specified, all classes will be downsampled to have a maximum of `kSample` samples. An if a class contains fewer than `kSample` samples, all observations from that class will be retained.
+
+Suppose we want to predict the number of cylinders (`cyl`) in a car. The number of observations in each class is:
+
+```{r}
+table(mpg$cyl)
+```
+
+If we apply downsampling without specifying `kSample`, we will randomly select 4 samples from each group, as the smallest group (`cyl = 5`) has only 4 observations.
+
+```{r}
+set.seed(443)
+fitCyl <- folda(mpg[, -5], mpg[, 5], downSampling = TRUE)
+fitCyl$confusionMatrix
+```
+
+We can also set `kSample = 30`. In this case, 30 random samples will be selected from `cyl = 4, 6, 8`, while 4 samples will be chosen from `cyl = 5`.
+
+```{r}
+fitCyl30 <- folda(mpg[, -5], mpg[, 5], downSampling = TRUE, kSample = 30)
+fitCyl30$confusionMatrix
+```
+
+It's important to note that this downsampling process **changes the prior**, and all subsequent results are based on the downsampled data. If you only want to downsample for speed (or another reason while maintaining the original proportion or prior), be sure to specify the prior explicitly.
+
+```{r}
+fitCylWithPrior <- folda(mpg[, -5], mpg[, 5], downSampling = TRUE, prior = table(mpg[, 5]))
+fitCylWithPrior$confusionMatrix
+```
+
+As we can see, the prior in this model suppresses the prediction of class `cyl = 5`, and the confusion matrix differs from the one in `fitCyl`.
+
+
 # Additional Features
 
 * **`correction`**: If you're less concerned about controlling the type I error and prefer a more aggressive variable selection process, setting `correction = FALSE` may result in better testing accuracy, particularly when the number of columns exceeds the number of rows.
@@ -221,6 +272,8 @@ As shown, the model tends to predict versicolor more often due to the higher mis
 
 # References
 
-* Howland, P., Jeon, M., & Park, H. (2003). *Structure preserving dimension reduction for clustered text data based on the generalized singular value decomposition*. SIAM Journal on Matrix Analysis and Applications, 25(1), 165-179.
+* Howland, P., Jeon, M., & Park, H. (2003). Structure preserving dimension reduction for clustered text data based on the generalized singular value decomposition. *SIAM Journal on Matrix Analysis and Applications*, 25(1), 165-179.
 
-* Rencher, A. C., & Christensen, W. F. (2002). *Methods of multivariate analysis* (Vol. 727). John Wiley & Sons.
+* Rencher, A. C., & Christensen, W. F. (2002). *Methods of Multivariate Analysis* (Vol. 727). John Wiley & Sons.
+
+* Wang, S. (2024). A new forward discriminant analysis framework based on Pillai's trace and ULDA. *arXiv preprint*, arXiv:2409.03136. Retrieved from https://arxiv.org/abs/2409.03136.

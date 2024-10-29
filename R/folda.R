@@ -6,7 +6,7 @@
 #' perform downsampling, and compute the linear discriminant scores and group
 #' means for classification. The function returns a fitted ULDA model object.
 #'
-#' @param datX A data frame containing the predictor variables.
+#' @param datX A data frame of predictor variables.
 #' @param response A factor representing the response variable with multiple
 #'   classes.
 #' @param subsetMethod A character string specifying the method for variable
@@ -31,8 +31,11 @@
 #'   missing values for numerical and categorical variables, respectively.
 #'   Default is `c("medianFlag", "newLevel")`.
 #' @param downSampling A logical value indicating whether to perform
-#'   downsampling to balance the class distribution in the training data or
-#'   speed up the program. Default is `FALSE`.
+#'   downsampling to balance the class distribution in the training data or to
+#'   improve computational efficiency. Default is `FALSE`. Note that if
+#'   downsampling is applied and the `prior` is `NULL`, the class prior will be
+#'   calculated based on the downsampled data. To retain the original prior,
+#'   please specify it explicitly using the `prior` parameter.
 #' @param kSample An integer specifying the maximum number of samples to take
 #'   from each class during downsampling. If `NULL`, the number of samples is
 #'   limited to the size of the smallest class. Default is `NULL`.
@@ -85,8 +88,11 @@ folda <- function(datX,
 
   # Pre-processing: Arguments ----------------------------------
 
-  if (!is.data.frame(datX)) stop("datX must be a data.frame")
-  response <- droplevels(as.factor(response))
+  datX <- data.frame(datX) # change to data.frame, remove the potential tibble attribute
+  for(i in seq_along(datX)){ # remove ordered factors
+    if(inherits(datX[,i], c("ordered"))) class(datX[,i]) <- "factor"
+  }
+  response <- droplevels(factor(response, ordered = FALSE)) # remove ordered factors
   subsetMethod <- match.arg(subsetMethod, c("forward", "all"))
 
   # Pre-processing: Data Cleaning -----------------------------------------------
@@ -117,15 +123,22 @@ folda <- function(datX,
                              alpha = alpha,
                              correction = correction)
 
-    # When no variable is selected, use the full model
-    if(length(forwardRes$currentVarList) != 0){
-      # modify the design matrix to make it more compact
-      selectedVarRawIdx <- unique(sort(attributes(m)$assign[forwardRes$currentVarList]))
-      modelFrame <- stats::model.frame(formula = ~.-1, datX[, selectedVarRawIdx, drop = FALSE], na.action = "na.fail")
-      Terms <- stats::terms(modelFrame)
-      m <- scale(stats::model.matrix(Terms, modelFrame))
-      currentVarList <- which(colnames(m) %in% forwardRes$forwardInfo$var)
+    selectedVarRawIdx <- forwardRes$currentVarList
+    selectedVarName <- forwardRes$forwardInfo$var
+
+    if(length(selectedVarRawIdx) == 0){ # When no variable is marginal significant based on Pillai's trace
+      chiStat <- getChiSqStat(datX = m, response = response)
+      selectedVarRawIdx <- which(chiStat >= stats::qchisq(1 - 0.0001/length(chiStat), 1)) # Bonferroni with alpha = 0.0001
+      if(length(selectedVarRawIdx) == 0) selectedVarRawIdx <- which.max(chiStat)
+      selectedVarName <- colnames(m)[selectedVarRawIdx]
     }
+
+    # modify the design matrix to make it more compact
+    selectedVarRawIdx <- unique(sort(attributes(m)$assign[selectedVarRawIdx]))
+    modelFrame <- stats::model.frame(formula = ~.-1, datX[, selectedVarRawIdx, drop = FALSE], na.action = "na.fail")
+    Terms <- stats::terms(modelFrame)
+    m <- scale(stats::model.matrix(Terms, modelFrame))
+    currentVarList <- which(colnames(m) %in% selectedVarName)
   }
 
   varSD <- attr(m,"scaled:scale")[currentVarList]
@@ -140,13 +153,13 @@ folda <- function(datX,
   Hw <- m - groupMeans[response, , drop = FALSE]
   if(diff(dim(m)) < 0){ # More rows than columns
     qrRes <- qrEigen(Hw)
-    fitSVD <- svdEigen(rbind(Hb, qrRes$R))
-  }else fitSVD <- svdEigen(rbind(Hb, Hw))
+    fitSVD <- saferSVD(rbind(Hb, qrRes$R))
+  }else fitSVD <- saferSVD(rbind(Hb, Hw))
 
   # Step 2: SVD on the P matrix
   N <- nrow(m); J <- nlevels(response)
   rankT <- sum(fitSVD$d >= max(dim(fitSVD$u), dim(fitSVD$v)) * .Machine$double.eps * fitSVD$d[1])
-  fitSVDp <- svdEigen(fitSVD$u[seq_len(J), seq_len(rankT), drop = FALSE], uFlag = FALSE)
+  fitSVDp <- saferSVD(fitSVD$u[seq_len(J), seq_len(rankT), drop = FALSE], uFlag = FALSE)
   rankAll <- min(J - 1, sum(fitSVDp$d >= max(J, rankT) * .Machine$double.eps * fitSVDp$d[1]))
 
   # Step 3: Transform Sw into identity matrix
@@ -213,7 +226,7 @@ folda <- function(datX,
 #' prob_predictions <- predict(fit, iris, type = "prob")
 predict.ULDA <- function(object, newdata, type = c("response", "prob"), ...){
   type <- match.arg(type, c("response", "prob"))
-  LDscores <- getLDscores(modelLDA = object, data = newdata)
+  LDscores <- getLDscores(modelULDA = object, data = newdata)
   loglikelihood <- LDscores %*% t(object$groupMeans) + matrix(log(object$prior) - 0.5 * rowSums(object$groupMeans^2), nrow(LDscores), length(object$prior), byrow = TRUE)
   likelihood <- exp(loglikelihood - apply(loglikelihood, 1, max))
   posterior <- likelihood / apply(likelihood, 1, sum)

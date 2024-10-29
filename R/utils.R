@@ -43,6 +43,7 @@ missingFix <- function(data, missingMethod = c("medianFlag", "newLevel")){
 
   # remove constant columns
   data <- data[, nonConstInd(data = data), drop = FALSE]
+  if(any(dim(data) == 0)) return(list(data = data, ref = data)) # all columns are constant
 
   # Add Missing Columns #
   numOrNot <- getNumFlag(data); NAorNot <- sapply(data, anyNA)
@@ -185,6 +186,8 @@ getDataInShape <- function(data, missingReference){
 
 #' Identify Non-Constant Columns in a Data Frame
 #'
+#' @noRd
+#'
 #' @param data A data frame in which columns will be checked for constant
 #'   values. Columns can be of any type (numeric, integer, logical, or factor).
 #' @param tol A numeric tolerance value (default is `1e-8`) that applies to
@@ -216,6 +219,8 @@ nonConstInd <- function(data, tol = 1e-8, na.rm = FALSE){
 #' This function selects the indices for the training set based on the class
 #' vector `response`. It allows for optional downsampling to balance the class
 #' distribution by limiting the number of samples per class.
+#'
+#' @noRd
 #'
 #' @param response A factor vector representing the class labels.
 #' @param downSampling A logical value indicating whether downsampling should be
@@ -256,6 +261,8 @@ getDownSampleInd <- function(response,
 #' whether each column matches these types, or, if `index = TRUE`, it returns
 #' the indices of the matching columns.
 #'
+#' @noRd
+#'
 #' @param data A data frame or a vector. The function will check the data types
 #'   of the columns (if `data` is a data frame) or the type of the vector.
 #' @param index A logical value. If `FALSE` (default), the function returns a
@@ -284,12 +291,29 @@ getNumFlag <- function(data, index = FALSE){
 
 #' Calculate the Mode of a Factor Variable with Optional Priors
 #'
+#' This function calculates the mode of a given factor or vector that can be
+#' coerced into a factor. You can optionally provide prior weights for each
+#' level of the factor.
+#'
 #' @param v A factor or vector that can be coerced into a factor. The mode will
 #'   be calculated from the levels of this factor.
 #' @param prior A numeric vector of prior weights for each level of the factor.
+#'   If not provided, all levels will be given equal weight.
 #'
 #' @return The mode of the factor `v` as a character string. If all values are
 #'   `NA`, the function returns `NA`.
+#'
+#' @export
+#'
+#' @examples
+#' # Example 1: Mode without priors
+#' v <- factor(c("apple", "banana", "apple", "orange", NA))
+#' getMode(v)
+#'
+#' # Example 2: Mode with priors
+#' v <- factor(c("apple", "banana", "apple", "orange", NA))
+#' prior <- c(apple = 0.5, banana = 1.5, orange = 1)
+#' getMode(v, prior)
 getMode <- function(v, prior){
   #> NA will be ignored
   v <- as.factor(v)
@@ -333,6 +357,20 @@ getMode <- function(v, prior){
 #'   probabilities for each class.} \item{misClassCost}{A square matrix
 #'   representing the misclassification costs, with rows and columns labeled by
 #'   the levels of the response variable.}
+#'
+#' @export
+#'
+#' @examples
+#' # Example 1: Using default prior and misClassCost
+#' response <- factor(c('A', 'B', 'A', 'B', 'C', 'A'))
+#' checkPriorAndMisClassCost(NULL, NULL, response)
+#'
+#' # Example 2: Providing custom prior and misClassCost
+#' prior <- c(A = 1, B = 1, C = 2)
+#' misClassCost <- matrix(c(0, 2, 10,
+#'                          1, 0, 10,
+#'                          1, 2, 0), nrow = 3, byrow = TRUE)
+#' checkPriorAndMisClassCost(prior, misClassCost, response)
 checkPriorAndMisClassCost <- function(prior, misClassCost, response){
 
   matchWrapper <- function(nameObj, nameTarget){
@@ -347,13 +385,13 @@ checkPriorAndMisClassCost <- function(prior, misClassCost, response){
   freqObs <- table(response, dnn = NULL) / length(response) # Default: Estimated Prior
 
   if (is.null(prior)) { # prior fix
-    prior <- freqObs
+    prior <- as.vector(freqObs)
   } else {
-    if (!getNumFlag(prior) || any(prior < 0)) stop("prior must be non-negative numbers")
+    if (!is.numeric(prior) || any(prior < 0)) stop("prior must be non-negative numbers")
     if (length(prior) != nlevels(response))
       stop("The length of 'prior' must be equal to the number of response levels (", nlevels(response), ").")
     if (!is.null(names(prior))) prior <- prior[matchWrapper(names(prior), levels(response))]
-    prior <- prior / sum(prior)
+    prior <- as.vector(prior) / sum(prior)
   }
 
   if (is.null(misClassCost)){ # fix misClassCost fix
@@ -381,7 +419,9 @@ checkPriorAndMisClassCost <- function(prior, misClassCost, response){
 
 #' Compute Linear Discriminant Scores
 #'
-#' @param modelLDA A fitted LDA model object containing the scaling matrix and
+#' @noRd
+#'
+#' @param modelULDA A fitted LDA model object containing the scaling matrix and
 #'   the reference structure for missing data.
 #' @param data A data frame containing the predictor variables for which to
 #'   compute the linear discriminant scores.
@@ -391,21 +431,23 @@ checkPriorAndMisClassCost <- function(prior, misClassCost, response){
 #'   observations and columns correspond to the computed discriminant scores.
 #'   If `nScores > 0`, only the specified number of scores is returned; otherwise,
 #'   all scores are computed and returned.
-getLDscores <- function(modelLDA, data, nScores = -1){
-  data <- getDataInShape(data = data, missingReference = modelLDA$misReference)
-  modelX <- getDesignMatrix(modelLDA = modelLDA, data = data, scale = TRUE)
+getLDscores <- function(modelULDA, data, nScores = -1){
+  data <- getDataInShape(data = data, missingReference = modelULDA$misReference)
+  modelX <- getDesignMatrix(modelULDA = modelULDA, data = data, scale = TRUE)
   if(nScores > 0){
-    nScores <- min(nScores, ncol(modelLDA$scaling))
-    modelLDA$scaling <- modelLDA$scaling[, seq_len(nScores), drop = FALSE]
+    nScores <- min(nScores, ncol(modelULDA$scaling))
+    modelULDA$scaling <- modelULDA$scaling[, seq_len(nScores), drop = FALSE]
   }
-  LDscores <- modelX %*% modelLDA$scaling
+  LDscores <- modelX %*% modelULDA$scaling
   return(LDscores)
 }
 
 
 #' Generate the Design Matrix for LDA Model
 #'
-#' @param modelLDA A fitted LDA model object containing the terms, variable
+#' @noRd
+#'
+#' @param modelULDA A fitted LDA model object containing the terms, variable
 #'   indices, variable centers, and scaling factors.
 #' @param data A data frame containing the predictor variables that are used to
 #'   create the design matrix.
@@ -416,13 +458,114 @@ getLDscores <- function(modelLDA, data, nScores = -1){
 #'   each column to a predictor variable. If `scale = TRUE`, the variables are
 #'   centered and scaled based on the means and standard deviations provided in
 #'   the LDA model object.
-getDesignMatrix <- function(modelLDA, data, scale = FALSE){
-  Terms <- stats::delete.response(modelLDA$terms)
-  modelX <- stats::model.matrix(Terms, data = data, xlev = modelLDA$xlevels)
+getDesignMatrix <- function(modelULDA, data, scale = FALSE){
+  Terms <- stats::delete.response(modelULDA$terms)
+  modelX <- stats::model.matrix(Terms, data = data, xlev = modelULDA$xlevels)
   if(scale){ # Reserved for internal usage from getLDscores
-    modelX <- sweep(modelX[, modelLDA$varIdx, drop = FALSE], 2, modelLDA$varCenter, "-")
-    modelX <- sweep(modelX, 2, modelLDA$varSD, "/")
+    modelX <- sweep(modelX[, modelULDA$varIdx, drop = FALSE], 2, modelULDA$varCenter, "-")
+    modelX <- sweep(modelX, 2, modelULDA$varSD, "/")
   }
   return(modelX)
+}
+
+
+#' Compute Chi-Squared Statistics for Variables
+#'
+#' This function calculates the chi-squared statistic for each column of `datX`
+#' against the response variable `response`. It supports both numerical and
+#' categorical predictors in `datX`. For numerical variables, it automatically
+#' discretizes them into factor levels based on standard deviations and mean,
+#' using different splitting criteria depending on the sample size.
+#'
+#' @param datX A matrix or data frame containing predictor variables. It can
+#'   consist of both numerical and categorical variables.
+#' @param response A factor representing the class labels. It must have at least
+#'   two levels for the chi-squared test to be applicable.
+#'
+#' @return A vector of chi-squared statistics, one for each predictor variable
+#'   in `datX`. For numerical variables, the chi-squared statistic is computed
+#'   after binning the variable.
+#'
+#' @details For each variable in `datX`, the function first checks if the
+#'   variable is numerical. If so, it is discretized into factor levels using
+#'   either two or three split points, depending on the sample size and the
+#'   number of levels in the `response`. Missing values are handled by assigning
+#'   them to a new factor level.
+#'
+#'   The chi-squared statistic is then computed between each predictor and the
+#'   `response`. If the chi-squared test has more than one degree of freedom,
+#'   the Wilson-Hilferty transformation is applied to adjust the statistic to a
+#'   1-degree-of-freedom chi-squared distribution.
+#'
+#' @export
+#'
+#' @references Loh, W. Y. (2009). Improving the precision of classification
+#' trees. \emph{The Annals of Applied Statistics}, 1710–1737. JSTOR.
+#'
+#' @examples
+#' datX <- data.frame(var1 = rnorm(100), var2 = factor(sample(letters[1:3], 100, replace = TRUE)))
+#' y <- factor(sample(c("A", "B"), 100, replace = TRUE))
+#' getChiSqStat(datX, y)
+getChiSqStat <- function(datX, response){
+  y <- droplevels(as.factor(response))
+  if(is.null(dim(datX))) return(getChiSqStatHelper(datX, y))
+
+  return(apply(datX, 2, function(x) getChiSqStatHelper(x, y)))
+}
+
+getChiSqStatHelper <- function(x,y){
+  if(getNumFlag(x)){ # numerical variable: first change to factor
+    m = mean(x,na.rm = T); s = stats::sd(x,na.rm = T)
+    if(sum(!is.na(x)) >= 30 * nlevels(y)){
+      splitNow = c(m - s *sqrt(3)/2, m, m + s *sqrt(3)/2)
+    }else splitNow = c(m - s *sqrt(3)/3, m + s *sqrt(3)/3)
+
+    if(length(unique(splitNow)) == 1) return(0) # No possible split
+    x = cut(x, breaks = c(-Inf, splitNow, Inf), right = TRUE)
+  }
+
+  if(anyNA(x)){
+    levels(x) = c(levels(x), 'newLevel')
+    x[is.na(x)] <- 'newLevel'
+  }
+  if(length(unique(x)) == 1) return(0) # No possible split
+
+  fit <- suppressWarnings(stats::chisq.test(x, y))
+
+  #> Change to 1-df wilson_hilferty chi-squared stat unless
+  #> the original df = 1 and p-value is larger than 10^(-16)
+  ans = unname(ifelse(fit$parameter > 1L, ifelse(fit$p.value > 10^(-16),
+                                                 stats::qchisq(1-fit$p.value, df = 1),
+                                                 wilson_hilferty(fit$statistic,fit$parameter)), fit$statistic))
+  return(ans)
+}
+
+
+wilson_hilferty = function(chi, df){ # change df = K to df = 1
+  ans = max(0, (7/9 + sqrt(df) * ( (chi / df) ^ (1/3) - 1 + 2 / (9 * df) ))^3)
+  return(ans)
+}
+
+
+# For users that does not have the latest RcppEigen module ----------------
+
+
+saferSVD <- function(x, uFlag = TRUE) {
+  fitSVD <- tryCatch({
+    if (uFlag) {
+      svdEigen(x)
+    } else svdEigen(x, uFlag = FALSE)
+  }, error = function(e) {NULL})
+
+  if (!is.null(fitSVD) && !anyNA(fitSVD$v)) return(fitSVD)
+
+  # if svdEigen is NULL / NA in the fitSVD -> fallback to base::svd
+  fitSVD <- tryCatch({
+    if (uFlag) {
+      svd(x)
+    } else svd(x, nu = 0L)
+  }, error = function(e) {stop("Both svd modules failed, check your input data.")})
+
+  return(fitSVD)
 }
 

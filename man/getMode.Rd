@@ -10,12 +10,25 @@ getMode(v, prior)
 \item{v}{A factor or vector that can be coerced into a factor. The mode will
 be calculated from the levels of this factor.}
 
-\item{prior}{A numeric vector of prior weights for each level of the factor.}
+\item{prior}{A numeric vector of prior weights for each level of the factor.
+If not provided, all levels will be given equal weight.}
 }
 \value{
 The mode of the factor \code{v} as a character string. If all values are
 \code{NA}, the function returns \code{NA}.
 }
 \description{
-Calculate the Mode of a Factor Variable with Optional Priors
+This function calculates the mode of a given factor or vector that can be
+coerced into a factor. You can optionally provide prior weights for each
+level of the factor.
+}
+\examples{
+# Example 1: Mode without priors
+v <- factor(c("apple", "banana", "apple", "orange", NA))
+getMode(v)
+
+# Example 2: Mode with priors
+v <- factor(c("apple", "banana", "apple", "orange", NA))
+prior <- c(apple = 0.5, banana = 1.5, orange = 1)
+getMode(v, prior)
 }

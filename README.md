@@ -33,7 +33,7 @@ ULDA, please refer to the following resources:
 ## Installation
 
 ``` r
-install.packages("LDATree")
+install.packages("folda")
 ```
 
 You can install the development version of `folda` from
@@ -73,8 +73,6 @@ For the forward LDA implementation, `folda` offers the following
 advantages over the classical framework:
 
 - **No issues with multicollinearity or perfect linear dependency!**
-  Since `folda()` is built on ULDA, it effectively solves for the
-  scaling matrix.
 
 - **Handles perfect separation and offers greater power!** The classical
   approach using Wilks’ Lambda has known limitations, including
@@ -144,6 +142,18 @@ plot(fit, datX = datX, response = response)
 
 <img src="man/figures/README-unnamed-chunk-5-1.png" width="70%" style="display: block; margin: auto;" />
 
+One-dimensional plot:
+
+``` r
+# A 1D plot is created when there is only one feature 
+# or for binary classification problems.
+mpgSmall <- mpg[, c("cyl", "displ")]
+fitSmall <- folda(mpgSmall[, -1, drop = FALSE], mpgSmall[, 1])
+plot(fitSmall, mpgSmall, mpgSmall[, 1])
+```
+
+<img src="man/figures/README-unnamed-chunk-6-1.png" width="70%" style="display: block; margin: auto;" />
+
 Make predictions:
 
 ``` r
@@ -164,13 +174,17 @@ More examples can be found in the
 
 ## References
 
-- Howland, P., Jeon, M., & Park, H. (2003). *Structure preserving
+- Howland, P., Jeon, M., & Park, H. (2003). Structure preserving
   dimension reduction for clustered text data based on the generalized
-  singular value decomposition*. SIAM Journal on Matrix Analysis and
-  Applications, 25(1), 165-179.
+  singular value decomposition. *SIAM Journal on Matrix Analysis and
+  Applications*, 25(1), 165-179.
 
-- Rencher, A. C., & Christensen, W. F. (2002). *Methods of multivariate
-  analysis* (Vol. 727). John Wiley & Sons.
+- Rencher, A. C., & Christensen, W. F. (2002). *Methods of Multivariate
+  Analysis* (Vol. 727). John Wiley & Sons.
+
+- Wang, S. (2024). A new forward discriminant analysis framework based
+  on Pillai’s trace and ULDA. *arXiv preprint*, arXiv:2409.03136.
+  Retrieved from <https://arxiv.org/abs/2409.03136>.
 
 ## Getting help
 
